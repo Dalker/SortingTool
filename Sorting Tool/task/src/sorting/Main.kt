@@ -1,57 +1,62 @@
 package sorting
 
-import java.util.*
+import java.util.Scanner
 
-abstract class Sortable<T> {
-    abstract val datumName: String
-    abstract val max: T?
-    abstract fun getNext(scanner: Scanner): T
-    abstract fun printMax()
+interface SortableDataType<T> {
+    val datumName: String
+    fun Scanner.getNext(): T
+    fun getMax(data: List<T>): T?
+    fun printMax(max: T)
+}
 
-    val data = mutableListOf<T>()
+class Sortable<T>(dataType: SortableDataType<T>) : SortableDataType<T> by dataType {
+    private val data: List<T>
     init {
+        val mData = mutableListOf<T>()
         val scanner = Scanner(System.`in`)
         while(scanner.hasNext()) {
-            data.add(getNext(scanner))
+            mData.add(scanner.getNext())
         }
+        data = mData.toList()
     }
 
     fun report() {
+        val maxDatum = getMax(data)!!
         val total = data.size
         println("Total ${datumName}s: $total.")
-        printMax()
-        val occurrences = data.count { it == max }
+        printMax(maxDatum)
+        val occurrences = data.count { it == maxDatum }
         val percent = occurrences * 100 / total
         println("($occurrences time(s), $percent%)")
     }
 }
 
-class Numbers : Sortable<Long>() {
+class Numbers : SortableDataType<Long> {
     override val datumName = "number"
-    override val max = data.maxOrNull()
-    override fun getNext(scanner: Scanner): Long = scanner.nextLong()
-    override fun printMax() = print("The greatest number: $max ")
+    override fun Scanner.getNext(): Long = this.nextLong()
+    override fun getMax(data: List<Long>) = data.maxOrNull()
+    override fun printMax(max: Long) = print("The greatest number: $max ")
 }
 
-class Lines : Sortable<String>() {
+class Lines : SortableDataType<String> {
     override val datumName = "line"
-    override val max = data.maxByOrNull { it.length }
-    override fun getNext(scanner: Scanner): String = scanner.nextLine()
-    override fun printMax() = print("The longest line:\n$max\n")
+    override fun Scanner.getNext(): String = this.nextLine()
+    override fun getMax(data: List<String>) = data.maxByOrNull { it.length }
+    override fun printMax(max: String) = print("The longest line:\n$max\n")
 }
 
-class Words : Sortable<String>() {
+class Words : SortableDataType<String> {
     override val datumName = "word"
-    override val max = data.maxByOrNull { it.length }
-    override fun getNext(scanner: Scanner): String = scanner.next()
-    override fun printMax() = print("The longest word: $max ")
+    override fun Scanner.getNext(): String = this.next()
+    override fun getMax(data: List<String>) = data.maxByOrNull { it.length }
+    override fun printMax(max: String) = print("The longest word: $max ")
 }
 
 fun main(args: Array<String>) {
     val dataType = if (args.size > 1 && args[0] == "-dataType") args[1] else "word"
     when(dataType) {
-        "long" -> Numbers()
-        "line" -> Lines()
-        else -> Words()
+        "long" -> Sortable(Numbers())
+        "line" -> Sortable(Lines())
+        else -> Sortable(Words())
     }.report()
 }
