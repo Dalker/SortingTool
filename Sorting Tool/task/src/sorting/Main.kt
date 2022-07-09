@@ -1,34 +1,49 @@
 package sorting
 
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.OutputStream
 import java.util.Scanner
 
 class ParsingException(err: String) : java.lang.RuntimeException(err)
 class SortableScannerException(err: String) : java.lang.RuntimeException(err)
-
 interface SortableDataType<T> {
     val datumName: String
     fun Scanner.getNext(): T
     fun chooseLeft(left: T, right: T): Boolean
 }
 
-class Sortable<T>(dataType: SortableDataType<T>)
-    : SortableDataType<T> by dataType {
+class Sortable<T>(
+    private val dataType: SortableDataType<T>,
+    private val sortingType: String,
+    scanner: Scanner,
+    outputStream: OutputStream,
+) : SortableDataType<T> by dataType {
     companion object {
         const val DEFAULT_SORTING = "natural"
         const val DEFAULT_TYPE = "word"
-        fun forType(dataTypeName: String) = Sortable(
-            when(dataTypeName) {
+        fun builder(args: Arguments) = Sortable(
+            when(args.dataTypeName) {
                 "long" -> Numbers()
                 "line" -> Lines()
                 "word" -> Words()
-                else -> error("unknown data type: $dataTypeName")
-            }
+                else -> error("unknown data type: ${args.dataTypeName}")
+            },
+            args.sortingType,
+            args.scanner,
+            args.outputStream,
         )
     }
+    data class Arguments(
+        val dataTypeName: String,
+        val sortingType: String,
+        val scanner: Scanner,
+        val outputStream: OutputStream,
+    )
     private val data: List<T>
+    private val writer = outputStream.writer()
     init {
         val mData = mutableListOf<T>()
-        val scanner = Scanner(System.`in`)
         while(scanner.hasNext()) {
             try {
                 mData.add(scanner.getNext())
@@ -38,18 +53,19 @@ class Sortable<T>(dataType: SortableDataType<T>)
         }
         data = mData.toList()
     }
-    fun report(sortingType: String = DEFAULT_SORTING) {
+    fun report() {
         val total = data.size
-        println("Total ${datumName}s: $total.")
+        writer.write("Total ${datumName}s: $total.\n")
         if (sortingType == "byCount") reportByCount(total) else reportSorted()
+        writer.flush()
     }
     private fun reportSorted() {
-        print("Sorted data: ")
+        writer.write("Sorted data: ")
         val separator = if (datumName == "line") {
             println()
             "\n"
         } else " "
-        println(mergeSort(data, ::chooseLeft).joinToString(separator))
+        writer.write(mergeSort(data, ::chooseLeft).joinToString(separator) + '\n')
     }
     private fun reportByCount(total: Int) {
         val occurrences = mutableMapOf<T, Int>()
@@ -59,7 +75,7 @@ class Sortable<T>(dataType: SortableDataType<T>)
                 || x.second == y.second && chooseLeft(x.first, y.first)
         }.forEach {
             val percent = it.second * 100 / total
-            println("${it.first}: ${it.second} time(s), $percent%")
+            writer.write("${it.first}: ${it.second} time(s), $percent%\n")
         }
     }
 }
@@ -109,10 +125,12 @@ class Words : SortableDataType<String> {
     override fun chooseLeft(left: String, right: String) = left < right
 }
 
-fun parseArgs(args: Array<String>): Pair<String, String> {
+fun parseArgs(args: Array<String>): Sortable.Arguments {
     var index = 0
     var sortingType = Sortable.DEFAULT_SORTING
     var dataType = Sortable.DEFAULT_TYPE
+    var inputSource = Scanner(System.`in`)
+    var outputSink: OutputStream = System.out
     while (index < args.size) {
         when (args[index]) {
             "-sortingType" -> try {
@@ -125,16 +143,30 @@ fun parseArgs(args: Array<String>): Pair<String, String> {
             } catch (err: ArrayIndexOutOfBoundsException) {
                 throw(ParsingException("No data type defined!"))
             }
+            "-inputFile" -> try {
+                inputSource = Scanner(File(args[++index]))
+            } catch (err: ArrayIndexOutOfBoundsException) {
+                throw(ParsingException("No input file name given!"))
+            } catch (err: FileNotFoundException) {
+                throw(ParsingException("File ${args[index]} not found!"))
+            }
+            "-outputFile" -> try {
+                outputSink = File(args[++index]).outputStream()
+            } catch (err: ArrayIndexOutOfBoundsException) {
+                throw(ParsingException("No output file name given!"))
+            } catch (err: FileNotFoundException) {
+                throw(ParsingException("File ${args[index]} not found!"))
+            }
             else -> {
                 println("\"${args[index]}\" is not a valid parameter. It will be skipped.")
             }
         }
         ++index
     }
-    return dataType to sortingType
+    return Sortable.Arguments(dataType, sortingType, inputSource, outputSink)
 }
 fun main(args: Array<String>) {
     try {
-        parseArgs(args).let { Sortable.forType(it.first).report(it.second) }
+        Sortable.builder(parseArgs(args)).report()
     } catch (err: ParsingException) { println(err.message) }
 }
