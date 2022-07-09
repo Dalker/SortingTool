@@ -5,12 +5,23 @@ import java.util.Scanner
 interface SortableDataType<T> {
     val datumName: String
     fun Scanner.getNext(): T
-    fun getMax(data: List<T>): T?
-    fun printMax(max: T)
-    fun sorted(data: List<T>): List<T>
+    fun chooseLeft(left: T, right: T): Boolean
 }
 
-class Sortable<T>(dataType: SortableDataType<T>) : SortableDataType<T> by dataType {
+class Sortable<T>(dataType: SortableDataType<T>)
+    : SortableDataType<T> by dataType {
+    companion object {
+        const val DEFAULT_SORTING = "natural"
+        const val DEFAULT_TYPE = "word"
+        fun forType(dataTypeName: String) = Sortable(
+            when(dataTypeName) {
+                "long" -> Numbers()
+                "line" -> Lines()
+                "word" -> Words()
+                else -> error("unknown data type: $dataTypeName")
+            }
+        )
+    }
     private val data: List<T>
     init {
         val mData = mutableListOf<T>()
@@ -20,56 +31,84 @@ class Sortable<T>(dataType: SortableDataType<T>) : SortableDataType<T> by dataTy
         }
         data = mData.toList()
     }
-    fun reportSorted() {
+    fun report(sortingType: String = DEFAULT_SORTING) {
         val total = data.size
         println("Total ${datumName}s: $total.")
+        if (sortingType == "byCount") reportByCount(total) else reportSorted()
+    }
+    private fun reportSorted() {
         print("Sorted data: ")
-        println(sorted(data).joinToString(" "))
+        val separator = if (datumName == "line") {
+            println()
+            "\n"
+        } else " "
+        println(mergeSort(data, ::chooseLeft).joinToString(separator))
     }
-    fun report() {
-        val maxDatum = getMax(data)!!
-        val total = data.size
-        println("Total ${datumName}s: $total.")
-        printMax(maxDatum)
-        val occurrences = data.count { it == maxDatum }
-        val percent = occurrences * 100 / total
-        println("($occurrences time(s), $percent%)")
+    private fun reportByCount(total: Int) {
+        val occurrences = mutableMapOf<T, Int>()
+        for (datum in data) occurrences[datum] = (occurrences[datum] ?: 0) + 1
+        mergeSort(occurrences.toList()) { x, y ->
+            x.second < y.second
+                || x.second == y.second && chooseLeft(x.first, y.first)
+        }.forEach {
+            val percent = it.second * 100 / total
+            println("${it.first}: ${it.second} time(s), $percent%")
+        }
     }
+}
+
+fun <T> mergeSort(data: List<T>, chooseLeft: (T, T) -> Boolean): List<T> {
+    if (data.size <= 1) return data
+    val half = data.size / 2
+    val leftData = mergeSort(data.take(half), chooseLeft)
+    val rightData = mergeSort(data.drop(half), chooseLeft)
+    val result = mutableListOf<T>()
+    var leftPointer = 0
+    var rightPointer = 0
+    while (leftPointer < leftData.size && rightPointer < rightData.size) {
+        result.add(
+            if (chooseLeft(leftData[leftPointer], rightData[rightPointer]))
+                leftData[leftPointer++]
+            else rightData[rightPointer++]
+        )
+    }
+    return result + leftData.drop(leftPointer) + rightData.drop(rightPointer)
 }
 
 class Numbers : SortableDataType<Long> {
     override val datumName = "number"
     override fun Scanner.getNext(): Long = this.nextLong()
-    override fun sorted(data: List<Long>) = data.sortedBy { it }
-    override fun getMax(data: List<Long>) = data.maxOrNull()
-    override fun printMax(max: Long) = print("The greatest $datumName: $max ")
+    override fun chooseLeft(left: Long, right: Long) = left < right
 }
 
 class Lines : SortableDataType<String> {
     override val datumName = "line"
     override fun Scanner.getNext(): String = this.nextLine()
-    override fun sorted(data: List<String>) = data.sortedBy { it }
-    override fun getMax(data: List<String>) = data.maxByOrNull { it.length }
-    override fun printMax(max: String) = print("The longest $datumName:\n$max\n")
+    override fun chooseLeft(left: String, right: String) = left < right
+    // following was for previous stages:
+    // override fun chooseLeft(left: String, right: String) = left.length > right.length
 }
 
 class Words : SortableDataType<String> {
     override val datumName = "word"
     override fun Scanner.getNext(): String = this.next()
-    override fun sorted(data: List<String>) = data.sortedBy { it }
-    override fun getMax(data: List<String>) = data.maxByOrNull { it.length }
-    override fun printMax(max: String) = print("The longest $datumName: $max ")
+    override fun chooseLeft(left: String, right: String) = left < right
 }
 
-fun main(args: Array<String>) {
-    if (args.contains("-sortIntegers")) {
-       Sortable(Numbers()).reportSorted()
-    } else {
-        val dataType = if (args.size > 1 && args[0] == "-dataType") args[1] else "word"
-        when(dataType) {
-            "long" -> Sortable(Numbers())
-            "line" -> Sortable(Lines())
-            else -> Sortable(Words())
-        }.report()
+fun parseArgs(args: Array<String>): Pair<String, String> {
+    var index = 0
+    var sortingType = Sortable.DEFAULT_SORTING
+    var dataType = Sortable.DEFAULT_TYPE
+    while (index < args.size) {
+        when (args[index]) {
+            "-sortingType" -> sortingType = args[++index]
+            "-dataType" -> dataType = args[++index]
+        }
+        ++index
     }
+    return dataType to sortingType
+}
+fun main(args: Array<String>) {
+    val (dataType, sortingType) = parseArgs(args)
+    Sortable.forType(dataType).report(sortingType)
 }
