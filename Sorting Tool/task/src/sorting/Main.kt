@@ -2,6 +2,9 @@ package sorting
 
 import java.util.Scanner
 
+class ParsingException(err: String) : java.lang.RuntimeException(err)
+class SortableScannerException(err: String) : java.lang.RuntimeException(err)
+
 interface SortableDataType<T> {
     val datumName: String
     fun Scanner.getNext(): T
@@ -27,7 +30,11 @@ class Sortable<T>(dataType: SortableDataType<T>)
         val mData = mutableListOf<T>()
         val scanner = Scanner(System.`in`)
         while(scanner.hasNext()) {
-            mData.add(scanner.getNext())
+            try {
+                mData.add(scanner.getNext())
+            } catch (err: SortableScannerException) {
+                println(err.message)
+            }
         }
         data = mData.toList()
     }
@@ -77,7 +84,14 @@ fun <T> mergeSort(data: List<T>, chooseLeft: (T, T) -> Boolean): List<T> {
 
 class Numbers : SortableDataType<Long> {
     override val datumName = "number"
-    override fun Scanner.getNext(): Long = this.nextLong()
+    override fun Scanner.getNext(): Long { // = this.nextLong()
+        val next = this.next()
+        try {
+            return next.toLong()
+        } catch (err: NumberFormatException) {
+            throw SortableScannerException("\"$next\" is not a long. It will be skipped")
+        }
+    }
     override fun chooseLeft(left: Long, right: Long) = left < right
 }
 
@@ -101,14 +115,26 @@ fun parseArgs(args: Array<String>): Pair<String, String> {
     var dataType = Sortable.DEFAULT_TYPE
     while (index < args.size) {
         when (args[index]) {
-            "-sortingType" -> sortingType = args[++index]
-            "-dataType" -> dataType = args[++index]
+            "-sortingType" -> try {
+                sortingType = args[++index]
+            } catch (err: ArrayIndexOutOfBoundsException) {
+                throw(ParsingException("No sorting type defined!"))
+            }
+            "-dataType" -> try {
+                dataType = args[++index]
+            } catch (err: ArrayIndexOutOfBoundsException) {
+                throw(ParsingException("No data type defined!"))
+            }
+            else -> {
+                println("\"${args[index]}\" is not a valid parameter. It will be skipped.")
+            }
         }
         ++index
     }
     return dataType to sortingType
 }
 fun main(args: Array<String>) {
-    val (dataType, sortingType) = parseArgs(args)
-    Sortable.forType(dataType).report(sortingType)
+    try {
+        parseArgs(args).let { Sortable.forType(it.first).report(it.second) }
+    } catch (err: ParsingException) { println(err.message) }
 }
